@@ -4,6 +4,7 @@ import com.irctc.irctc_backend.security.JwtAuthenticationFilter;
 import com.irctc.irctc_backend.security.OAuth2SuccessHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.*;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.*;
@@ -22,14 +23,18 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-                .csrf(csrf -> csrf.disable())
+                // 🔥 REQUIRED for CORS
                 .cors(cors -> {})
+                .csrf(csrf -> csrf.disable())
 
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
 
                 .authorizeHttpRequests(auth -> auth
+                        // 🔥 ALLOW PREFLIGHT
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/oauth2/**",
@@ -39,7 +44,7 @@ public class SecurityConfig {
                                 "/error"
                         ).permitAll()
 
-                        //  ADMIN ONLY
+                        // ADMIN ONLY
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         // USER + ADMIN
