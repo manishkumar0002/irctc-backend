@@ -3,6 +3,7 @@ package com.irctc.irctc_backend.service;
 import com.irctc.irctc_backend.dto.RegisterRequest;
 import com.irctc.irctc_backend.entity.User;
 import com.irctc.irctc_backend.entity.UserRole;
+import com.irctc.irctc_backend.exception.UserAlreadyExistsException;
 import com.irctc.irctc_backend.repository.UserRepository;
 import com.irctc.irctc_backend.security.JwtUtil;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,7 +29,8 @@ public class AuthService {
     public void register(RegisterRequest request) {
 
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Email already exists");
+            throw new UserAlreadyExistsException("Email already exists");
+
         }
 
         User user = new User();

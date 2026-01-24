@@ -17,12 +17,15 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+
+
     private  String name;
     @Column(unique = true, nullable = false)
     private  String email;
     private String password;
-    @Enumerated(EnumType.STRING)
-    private UserRole role;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserRole role;
 
 }
