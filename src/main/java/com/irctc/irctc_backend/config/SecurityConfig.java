@@ -23,19 +23,23 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-                // 🔥 REQUIRED for CORS
+                // CORS & CSRF
                 .cors(cors -> {})
                 .csrf(csrf -> csrf.disable())
 
+                // Stateless session
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        // 🔥 ALLOW PREFLIGHT
+
+                        // 🔓 PREFLIGHT REQUESTS
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                        // 🔓 PUBLIC APIs (NO LOGIN REQUIRED)
                         .requestMatchers(
+                                "/api/public/**",
                                 "/api/auth/**",
                                 "/oauth2/**",
                                 "/login/**",
@@ -44,19 +48,22 @@ public class SecurityConfig {
                                 "/error"
                         ).permitAll()
 
-                        // ADMIN ONLY
+                        // 🔐 ADMIN ONLY
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                        // USER + ADMIN
+                        // 🔐 USER + ADMIN (LOGIN REQUIRED)
                         .requestMatchers("/api/**").hasAnyRole("USER", "ADMIN")
 
+                        // EVERYTHING ELSE
                         .anyRequest().authenticated()
                 )
 
+                // OAuth2 Login
                 .oauth2Login(oauth ->
                         oauth.successHandler(oAuth2SuccessHandler)
                 )
 
+                // JWT Filter
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
