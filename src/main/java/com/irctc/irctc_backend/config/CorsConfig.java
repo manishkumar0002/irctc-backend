@@ -18,7 +18,8 @@ public class CorsConfig {
                 "http://localhost:2026",
                 "https://rail-irctc-frontend.vercel.app",
                 "https://rail-irctc-frontend-git-main-manishkumar0002s-projects.vercel.app",
-                "https://indianrailclone.me"
+                "https://indianrailclone.me",
+                "https://www.indianrailclone.me"
         ));
 
         config.setAllowedMethods(List.of(
