@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import com.irctc.irctc_backend.modules.fare.service.FareService;
+import com.irctc.irctc_backend.modules.notification.service.NotificationService;
 import java.time.LocalDateTime;
 
 @Service
@@ -21,6 +23,9 @@ public class PaymentWebhookService {
 
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
+    private final FareService fareService;
+    private final NotificationService notificationService;
+    private final com.irctc.irctc_backend.modules.timeline.service.ActivityTimelineService activityTimelineService;
 
     @Value("${razorpay.webhook.secret}")
     private String webhookSecret;
@@ -43,19 +48,25 @@ public class PaymentWebhookService {
         String status = paymentEntity.getString("status");
         String method = paymentEntity.getString("method");
 
-        Long bookingId = extractBookingId(orderId);
+        // Try finding existing payment by gateway order ID to avoid duplicates and webhook crashes
+        Payment payment = paymentRepository.findByGatewayOrderId(orderId)
+                .orElseGet(() -> {
+                    Long bookingId = extractBookingId(orderId);
+                    Booking b = bookingRepository.findById(bookingId)
+                            .orElseThrow(() -> new RuntimeException("Booking not found"));
+                    Payment p = new Payment();
+                    p.setBooking(b);
+                    p.setGatewayOrderId(orderId);
+                    return p;
+                });
 
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new RuntimeException("Booking not found"));
+        Booking booking = payment.getBooking();
+        double totalFare = fareService.getFareBreakdownByBookingId(booking.getId()).getTotalFare();
 
         if ("payment.captured".equals(event)) {
-
-            Payment payment = new Payment();
-            payment.setBooking(booking);
-            payment.setGatewayOrderId(orderId);
             payment.setGatewayPaymentId(paymentId);
             payment.setGatewaySignature(signature);
-            payment.setAmount(booking.getSeatCount() * 500.0);
+            payment.setAmount(totalFare);
             payment.setPaymentMethod(method.toUpperCase());
             payment.setPaymentStatus("SUCCESS");
             payment.setPaymentTimestamp(LocalDateTime.now());
@@ -64,9 +75,24 @@ public class PaymentWebhookService {
 
             booking.setStatus("CONFIRMED");
             bookingRepository.save(booking);
+
+            // Send booking confirmation notification
+            notificationService.sendNotification(
+                    booking.getUser().getEmail(),
+                    "EMAIL",
+                    "CONFIRMATION",
+                    "IRCTC Ticket Confirmed - " + booking.getPnr(),
+                    "Dear Customer, your ticket booking is CONFIRMED.\nPNR: " + booking.getPnr() + "\nHappy Journey! 🚆"
+            );
+
+            // Record timeline event
+            activityTimelineService.addEvent(booking, "CONFIRMED", "Payment captured via webhook. Ticket booking confirmed.");
         }
 
         if ("payment.failed".equals(event)) {
+            payment.setPaymentStatus("FAILED");
+            paymentRepository.save(payment);
+
             booking.setStatus("CANCELLED");
             bookingRepository.save(booking);
         }

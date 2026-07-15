@@ -50,6 +50,7 @@ public class SecurityConfig {
 
                         // 🔐 ADMIN ONLY
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/actuator/**").hasRole("ADMIN")
 
                         // 🔐 USER + ADMIN (LOGIN REQUIRED)
                         .requestMatchers("/api/**").hasAnyRole("USER", "ADMIN")

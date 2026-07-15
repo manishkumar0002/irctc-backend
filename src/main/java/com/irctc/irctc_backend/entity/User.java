@@ -28,4 +28,10 @@ public class User {
     @Column(nullable = false)
     private UserRole role;
 
+    @Column(name = "failed_login_attempts")
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "lock_time")
+    private java.time.LocalDateTime lockTime;
+
 }

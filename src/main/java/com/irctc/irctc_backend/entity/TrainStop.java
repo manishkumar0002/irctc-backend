@@ -32,4 +32,22 @@ public class TrainStop {
 
     @Column(nullable = false)
     private boolean halt;
+
+    @Column(name = "arrival_time")
+    private String arrivalTime;
+
+    @Column(name = "departure_time")
+    private String departureTime;
+
+    @Column(name = "platform")
+    private Integer platform;
+
+    @Column(name = "distance_from_origin")
+    private Double distanceFromOrigin;
+
+    @Column(name = "running_days")
+    private String runningDays;
+
+    @Column(name = "expected_delay_minutes")
+    private Integer expectedDelayMinutes = 0;
 }

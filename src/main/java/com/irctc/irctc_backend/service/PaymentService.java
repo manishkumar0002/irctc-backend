@@ -14,6 +14,8 @@ import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.irctc.irctc_backend.modules.fare.service.FareService;
+import com.irctc.irctc_backend.modules.notification.service.NotificationService;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +27,9 @@ public class PaymentService {
 
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
+    private final FareService fareService;
+    private final NotificationService notificationService;
+    private final com.irctc.irctc_backend.modules.timeline.service.ActivityTimelineService activityTimelineService;
 
     @Value("${razorpay.key.id}")
     private String keyId;
@@ -58,11 +63,13 @@ public class PaymentService {
             );
         }
 
+        double totalFare = fareService.getFareBreakdownByBookingId(bookingId).getTotalFare();
+
         //  Create new Razorpay order
         RazorpayClient client = new RazorpayClient(keyId, keySecret);
 
         JSONObject options = new JSONObject();
-        options.put("amount", booking.getSeatCount() * 500 * 100);
+        options.put("amount", (int) (totalFare * 100)); // in paise
         options.put("currency", "INR");
         options.put("receipt", "BOOKING_" + bookingId);
 
@@ -71,12 +78,15 @@ public class PaymentService {
         Payment payment = new Payment();
         payment.setBooking(booking);
         payment.setGatewayOrderId(order.get("id"));
-        payment.setAmount(booking.getSeatCount() * 500.0);
+        payment.setAmount(totalFare);
         payment.setPaymentMethod("RAZORPAY");
         payment.setPaymentStatus("CREATED");
         payment.setPaymentTimestamp(LocalDateTime.now());
 
         paymentRepository.save(payment);
+
+        // Record timeline event
+        activityTimelineService.addEvent(booking, "PAYMENT_CREATED", "Checkout payment order generated on gateway. Order ID: " + order.get("id"));
 
         return new PaymentOrderResponse(
                 order.get("id"),
@@ -121,6 +131,18 @@ public class PaymentService {
 
         paymentRepository.save(payment);
         bookingRepository.save(booking);
+
+        // Send booking confirmation notification
+        notificationService.sendNotification(
+                booking.getUser().getEmail(),
+                "EMAIL",
+                "CONFIRMATION",
+                "IRCTC Ticket Confirmed - " + booking.getPnr(),
+                "Dear Customer, your ticket booking is CONFIRMED.\nPNR: " + booking.getPnr() + "\nHappy Journey! 🚆"
+        );
+
+        // Record timeline event
+        activityTimelineService.addEvent(booking, "CONFIRMED", "Payment verified. Ticket booking confirmed.");
     }
 
 

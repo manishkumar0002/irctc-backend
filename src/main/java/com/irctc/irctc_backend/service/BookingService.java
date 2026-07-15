@@ -11,7 +11,10 @@ import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import com.irctc.irctc_backend.modules.seat.service.SeatAllocationService;
+import com.irctc.irctc_backend.modules.fare.service.FareService;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,6 +28,10 @@ public class BookingService {
     private final UserRepository userRepository;
     private final RouteValidationService routeValidationService;
     private final SeatAvailabilityService seatAvailabilityService;
+    private final SeatAllocationService seatAllocationService;
+    private final FareService fareService;
+    private final com.irctc.irctc_backend.modules.chart.repository.ReservationChartRepository reservationChartRepository;
+    private final com.irctc.irctc_backend.modules.timeline.service.ActivityTimelineService activityTimelineService;
 
 
     // BOOK TICKET + SAVE PASSENGERS
@@ -38,11 +45,19 @@ public class BookingService {
         Train train = trainRepository.findById(request.getTrainId())
                 .orElseThrow(() -> new RuntimeException("Train not found"));
 
+        // Check if chart is prepared to freeze bookings
+        reservationChartRepository.findByTrainIdAndTravelDate(request.getTrainId(), request.getTravelDate())
+                .ifPresent(chart -> {
+                    if ("PREPARED".equals(chart.getChartStatus())) {
+                        throw new RuntimeException("Bookings are frozen as chart is already prepared for this train and date.");
+                    }
+                });
+
         routeValidationService.validateRoute(
                 train,
                 request.getSourceStationCode(),
                 request.getDestinationStationCode()
-        );
+            );
         if (request.getPassengers() == null || request.getPassengers().isEmpty()) {
             throw new RuntimeException("At least one passenger is required");
         }
@@ -56,14 +71,12 @@ public class BookingService {
                         request.getClassType()
                 );
 
-        if (seatAvailability.getAvailableSeats() < seatCount) {
-            throw new RuntimeException("Insufficient seats available");
+        boolean seatsAvailable = seatAvailability.getAvailableSeats() >= seatCount;
+        if (seatsAvailable) {
+            seatAvailability.setAvailableSeats(
+                    seatAvailability.getAvailableSeats() - seatCount
+            );
         }
-
-        seatAvailability.setAvailableSeats(
-                seatAvailability.getAvailableSeats() - seatCount
-        );
-
 
         Booking booking = new Booking();
         booking.setUser(user);
@@ -80,6 +93,7 @@ public class BookingService {
         booking = bookingRepository.save(booking);
 
         // SAVE PASSENGERS
+        List<Passenger> savedPassengers = new ArrayList<>();
         for (PassengerRequest pr : request.getPassengers()) {
             Passenger passenger = new Passenger();
             passenger.setName(pr.getName());
@@ -87,8 +101,17 @@ public class BookingService {
             passenger.setGender(pr.getGender());
             passenger.setBooking(booking);
 
-            passengerRepository.save(passenger);
+            savedPassengers.add(passengerRepository.save(passenger));
         }
+
+        // Allocate seats/berths in DB
+        seatAllocationService.allocateSeats(booking, savedPassengers);
+
+        // Calculate and save fare breakdown
+        fareService.calculateAndSaveFare(booking, savedPassengers);
+
+        // Record timeline milestone
+        activityTimelineService.addEvent(booking, "CREATED", "Ticket reservation created with PNR: " + booking.getPnr() + " in state PAYMENT_PENDING.");
 
         return booking;
     }

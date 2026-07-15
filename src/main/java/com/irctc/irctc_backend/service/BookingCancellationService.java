@@ -5,6 +5,7 @@ import com.irctc.irctc_backend.entity.SeatAvailability;
 import com.irctc.irctc_backend.repository.BookingRepository;
 import com.irctc.irctc_backend.repository.PassengerRepository;
 import com.irctc.irctc_backend.repository.SeatAvailabilityRepository;
+import com.irctc.irctc_backend.modules.seat.repository.PassengerAllocationRepository;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,8 @@ public class BookingCancellationService {
     private final BookingRepository bookingRepository;
     private final SeatAvailabilityRepository seatAvailabilityRepository;
     private final PassengerRepository passengerRepository;
+    private final PassengerAllocationRepository passengerAllocationRepository;
+    private final com.irctc.irctc_backend.modules.timeline.service.ActivityTimelineService activityTimelineService;
 
     @Transactional
     public void cancelBooking(Long bookingId) {
@@ -41,6 +44,9 @@ public class BookingCancellationService {
                 availability.getAvailableSeats() + booking.getSeatCount()
         );
 
+        //  remove passenger allocations
+        passengerAllocationRepository.deleteByBookingId(bookingId);
+
         //  remove passengers
         passengerRepository.deleteByBooking(booking);
 
@@ -48,6 +54,9 @@ public class BookingCancellationService {
         booking.setStatus("CANCELLED");
 
         seatAvailabilityRepository.save(availability);
-        bookingRepository.save(booking);
+        booking = bookingRepository.save(booking);
+
+        // Record timeline event
+        activityTimelineService.addEvent(booking, "CANCELLED", "Ticket reservation cancelled.");
     }
 }
